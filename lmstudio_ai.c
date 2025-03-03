@@ -31,7 +31,7 @@ void addToHistory(const char* content) {
 void buildJsonPayload(char* postData, size_t size, const char* lastQuestion) {
     snprintf(postData, size, "{\n    \"model\": \"phi4:latest\",\n    \"messages\": [\n");
 
-    // Tworzymy podsumowanie historii rozmowy
+    // Podsumowanie historii rozmowy
     strncat(postData, "        {\"role\": \"system\", \"content\": \"Answer as short as you can. Context of the conversation:\\n", size - strlen(postData) - 1);
 
     // Dodajemy historię rozmowy jako tekst w "system"
@@ -74,11 +74,12 @@ void SendHttpPostRequest(const char* url, const char* postData) {
     InternetSetOptionA(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
 
 
-    // Tworzenie połączenia z serwerem
-    // Rozbijamy URL, aby uzyskać hosta i port
+    
+    // Wyodrębnienie hosta i port z adresu URL
     const char* host = "localhost";
     const int port = 1234;
 
+    // Tworzenie połączenia z serwerem
     hConnect = InternetConnectA(hInternet, host, port, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (hConnect == NULL) {
         printf("Blad podczas laczenia sie z serwerem: %ld\n", GetLastError());
@@ -152,10 +153,6 @@ int main() {
         }
 
         char postData[8192];
-    
-        if (strcmp(userQuestion, "exit") == 0) {
-            break;
-        }
     
         // Dodaj pytanie do historii rozmowy
         addToHistory(userQuestion);

@@ -16,7 +16,6 @@ int historyCount = 0;  // Licznik przechowywanych wiadomości
 // Dodaje wiadomość do historii, przesuwając starsze wiadomości
 void addToHistory(const char* content) {
     if (historyCount >= HISTORY_LEN) {
-        // Jeśli przekroczyliśmy limit, usuwamy najstarszą wiadomość
         for (int i = 1; i < HISTORY_LEN; i++) {
             strncpy(history[i - 1], history[i], sizeof(history[i]));
         }
@@ -75,11 +74,11 @@ void SendHttpPostRequest(const char* url, const char* postData) {
     InternetSetOptionA(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
 
 
-    // Tworzenie połączenia z serwerem
-    // Rozbijamy URL, aby uzyskać hosta i port
+    //Wyodrębnienie hosta i port z adresu URL
     const char* host = "127.0.0.1";
     const int port = 11434;
-
+    
+    // Tworzenie połączenia z serwerem
     hConnect = InternetConnectA(hInternet, host, port, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (hConnect == NULL) {
         printf("Blad podczas laczenia sie z serwerem: %ld\n", GetLastError());
@@ -153,10 +152,6 @@ int main() {
         }
 
         char postData[8192];
-    
-        if (strcmp(userQuestion, "exit") == 0) {
-            break;
-        }
     
         // Dodaj pytanie do historii rozmowy
         addToHistory(userQuestion);
