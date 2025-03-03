@@ -1,4 +1,3 @@
-//LM Studio
 #include <windows.h>
 #include <wininet.h>
 #include <stdio.h>
@@ -6,14 +5,61 @@
 
 #pragma comment(lib, "wininet.lib")
 
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+void AddMessageToPostData(char* postData, const char* role, const char* content) {
+    char newMessage[1024];
+
+    // Sprawdzamy, czy w postData mamy tablicę "messages"
+    if (strstr(postData, "\"messages\": [") != NULL) {
+        // Znajdujemy miejsce, w którym kończy się tablica "messages" (przed ']')
+        char* closingBracket = strchr(postData, ']');
+        if (closingBracket != NULL) {
+            // Tworzymy nową wiadomość w formacie JSON
+            // Najpierw musimy zamienić wszystkie '\n' w 'content' na '\\n'
+            char escapedContent[1024];
+            int j = 0;
+
+            // Przechodzimy przez każdy znak w 'content' i zamieniamy '\n' na '\\n'
+            for (int i = 0; content[i] != '\0'; i++) {
+                if (content[i] == '\n') {
+                    escapedContent[j++] = '\\';
+                    escapedContent[j++] = 'n';
+                } else {
+                    escapedContent[j++] = content[i];
+                }
+            }
+            escapedContent[j] = '\0';  // Zakończenie ciągu
+
+            // Tworzymy nową wiadomość, uwzględniając 'escapedContent'
+            snprintf(newMessage, sizeof(newMessage),
+                     ",{\"role\": \"%s\", \"content\": \"%s\"}", role, escapedContent);
+            
+            // Dodajemy nową wiadomość przed zamknięciem tablicy ']'
+            size_t postDataLength = strlen(postData);
+            size_t newMessageLength = strlen(newMessage);
+
+            // Przesuwamy zawartość postData za miejscem, w którym ma być dodana nowa wiadomość
+            memmove(closingBracket + newMessageLength, closingBracket, postDataLength - (closingBracket - postData) + 1);
+            
+            // Wstawiamy newMessage przed zamknięciem tablicy ']'
+            memcpy(closingBracket, newMessage, newMessageLength);
+        }
+    }
+}
+
 // Funkcja do wysyłania żądania HTTP POST z danymi JSON
-void SendHttpPostRequest(const char* url, const char* postData) {
+void SendHttpPostRequest(const char* url, char* postData) {
     HINTERNET hInternet, hConnect;
     HINTERNET hRequest;
     DWORD bytesRead;
+    DWORD statusCode = 0;
     char buffer[4096];
     BOOL bResult;
-    
+
     // Inicjalizowanie WinINet
     hInternet = InternetOpenA("HTTP Client", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (hInternet == NULL) {
@@ -21,14 +67,7 @@ void SendHttpPostRequest(const char* url, const char* postData) {
         return;
     }
 
-    DWORD timeout = 120000;  // Czas oczekiwania ustawiony na 2 min
-    InternetSetOptionA(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
-    InternetSetOptionA(hInternet, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
-    InternetSetOptionA(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
-
-
     // Tworzenie połączenia z serwerem
-    // Rozbijamy URL, aby uzyskać hosta i port
     const char* host = "localhost";
     const int port = 1234;
 
@@ -70,13 +109,46 @@ void SendHttpPostRequest(const char* url, const char* postData) {
     }
 
     // Odczyt odpowiedzi z serwera
+    char response[4096];
+    memset(response, 0, sizeof(response));
     while (1) {
         bResult = InternetReadFile(hRequest, buffer, sizeof(buffer) - 1, &bytesRead);
         if (!bResult || bytesRead == 0) {
             break;
         }
-        buffer[bytesRead] = '\0';  // Null-terminate the buffer
-        printf("Odpowiedz: %s\n", buffer);  // Wyświetlanie odpowiedzi serwera
+        strncat(response, buffer, bytesRead);
+    }
+
+    // Szukamy odpowiedzi AI w odpowiedzi JSON
+    char* aiResponse = strstr(response, "\"content\":");
+    if (aiResponse != NULL) {
+        // Przesuwamy wskaźnik do treści odpowiedzi AI
+        aiResponse += strlen("\"content\":");
+
+        // Znajdź początek i koniec odpowiedzi
+        char* start = strchr(aiResponse, '"');
+        if (start != NULL) {
+            start++; // Przesuwamy wskaźnik do pierwszego znaku odpowiedzi
+
+            // Znajdź koniec odpowiedzi
+            char* end = strchr(start, '"');
+            if (end != NULL) {
+                *end = '\0'; // Terminatorem ciągu jest znak '"'
+                // Zamiana \n na prawdziwą nową linię
+                char* pos = start;
+                while ((pos = strstr(pos, "\\n")) != NULL) {
+                    *pos = '\n';
+                    memmove(pos + 1, pos + 2, strlen(pos + 2) + 1); // Przesunięcie reszty tekstu
+                }
+
+                // Wyświetlenie odpowiedzi AI
+                printf("Odpowiedz AI: \n%s\n", start);
+
+                AddMessageToPostData(postData, "assistant", start);
+            }
+        }
+    } else {
+        printf("Nie znaleziono odpowiedzi w JSON.\n");  // Jeśli odpowiedź nie zawiera 'content'
     }
 
     // Czyszczenie
@@ -87,46 +159,40 @@ void SendHttpPostRequest(const char* url, const char* postData) {
 
 int main() {
     const char* url = "http://localhost:1234/v1/chat/completions";  // Adres lokalnego serwera AI
-    char userQuestion[1024];  // Bufor na pytanie użytkownika
+    char userMessage[1024];
+    char postData[16384];
 
-    printf("Zadaj pytanie (wpisz 'exit' aby zakonczyc):\n");
+    // Przygotowanie początkowego postData
+    snprintf(postData, sizeof(postData),
+        "{"
+        "\"model\": \"llama-3.2-1b-instruct\","
+        "\"messages\": ["
+            "{\"role\": \"system\", \"content\": \"Always answer as short as you can.\"}"
+        "],"
+        "\"temperature\": 0.0"
+        "}"); // Poczatek wiadomości (pusty zestaw danych)
 
+    // Główna pętla do zadawania pytań
     while (1) {
-        // Pobieranie pytania od użytkownika
-        printf("> ");
-        fgets(userQuestion, sizeof(userQuestion), stdin);
-        
-        // Usuwamy nową linię na końcu (jeśli jest)
-        userQuestion[strcspn(userQuestion, "\n")] = 0;
+        printf("Podaj wiadomosc uzytkownika (lub 'exit' aby zakonczyc): ");
+        fgets(userMessage, sizeof(userMessage), stdin);
+        userMessage[strcspn(userMessage, "\n")] = 0;  // Usunięcie znaku nowej linii
 
-        // Jeśli użytkownik wpisał 'exit', kończymy program
-        if (strcmp(userQuestion, "exit") == 0) {
+        // Jeśli użytkownik wpisze 'exit', kończymy pętlę
+        if (strcmp(userMessage, "exit") == 0) {
             break;
         }
 
-        // Przygotowanie danych JSON do wysłania w żądaniu POST
-        char postData[2048];
-        snprintf(postData, sizeof(postData),
-            "{\n"
-            "    \"model\": \"model-identifier\",\n"
-            "    \"messages\": [\n"
-            "        {\n"
-            "            \"role\": \"system\",\n"
-            "            \"content\": \"Always answer as short as you can.\"\n"
-            "        },\n"
-            "        {\n"
-            "            \"role\": \"user\",\n"
-            "            \"content\": \"%s\"\n"
-            "        }\n"
-            "    ],\n"
-            "    \"temperature\": 0.7\n"
-            "}", userQuestion);
-        
-        printf("Wysylanie zadania HTTP POST z danymi JSON...\n");
+        // Dodanie wiadomości użytkownika do postData
+        AddMessageToPostData(postData, "user", userMessage);
+
+        // Wysyłanie żądania i wyświetlanie odpowiedzi po każdym zapytaniu
         SendHttpPostRequest(url, postData);
-        
     }
+
     return 0;
 }
+
+
 
 
