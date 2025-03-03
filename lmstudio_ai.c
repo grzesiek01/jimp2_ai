@@ -9,33 +9,27 @@
 #define HISTORY_LEN 10   // Maksymalna liczba przechowywanych wiadomości
 #define MAX_MSG_LEN 1024  // Maksymalna długość pojedynczej wiadomości
 
-typedef struct {
-    char role[10]; // "user" lub "assistant"
-    char content[MAX_MSG_LEN];
-} Message;
-
-Message history[HISTORY_LEN]; // Historia rozmowy
+char history[HISTORY_LEN][MAX_MSG_LEN]; // Historia rozmowy
 int historyCount = 0;  // Licznik przechowywanych wiadomości
 
 // Dodaje wiadomość do historii, przesuwając starsze wiadomości
-void addToHistory(const char* role, const char* content) {
+void addToHistory(const char* content) {
     if (historyCount >= HISTORY_LEN) {
         // Jeśli przekroczyliśmy limit, usuwamy najstarszą wiadomość
         for (int i = 1; i < HISTORY_LEN; i++) {
-            history[i - 1] = history[i];
+            strncpy(history[i - 1], history[i], sizeof(history[i]));
         }
         historyCount--;
     }
     
     // Dodajemy nową wiadomość na koniec
-    strncpy(history[historyCount].role, role, sizeof(history[historyCount].role) - 1);
-    strncpy(history[historyCount].content, content, sizeof(history[historyCount].content) - 1);
+    strncpy(history[historyCount], content, sizeof(history[historyCount]) - 1);
     historyCount++;
 }
 
 // Tworzy JSON z pełnym kontekstem rozmowy
 void buildJsonPayload(char* postData, size_t size, const char* lastQuestion) {
-    snprintf(postData, size, "{\n    \"model\": \"model-identifier\",\n    \"messages\": [\n");
+    snprintf(postData, size, "{\n    \"model\": \"phi4:latest\",\n    \"messages\": [\n");
 
     // Tworzymy podsumowanie historii rozmowy
     strncat(postData, "        {\"role\": \"system\", \"content\": \"Answer as short as you can. Context of the conversation:\\n", size - strlen(postData) - 1);
@@ -43,8 +37,8 @@ void buildJsonPayload(char* postData, size_t size, const char* lastQuestion) {
     // Dodajemy historię rozmowy jako tekst w "system"
     for (int i = 0; i < historyCount; i++) {
         snprintf(postData + strlen(postData), size - strlen(postData),
-                 "%s: %s\\n",
-                 history[i].role, history[i].content);
+                 "user: %s\\n",
+                 history[i]);
     }
 
     // Zamykamy historię
@@ -164,7 +158,7 @@ int main() {
         }
     
         // Dodaj pytanie do historii rozmowy
-        addToHistory("user", userQuestion);
+        addToHistory(userQuestion);
     
         // Zbuduj JSON-a uwzględniającego całą historię rozmowy
         buildJsonPayload(postData, sizeof(postData), userQuestion);
