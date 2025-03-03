@@ -1,4 +1,4 @@
-//Ollama
+//LM Studio
 #include <windows.h>
 #include <wininet.h>
 #include <stdio.h>
@@ -35,7 +35,7 @@ void addToHistory(const char* role, const char* content) {
 
 // Tworzy JSON z pełnym kontekstem rozmowy
 void buildJsonPayload(char* postData, size_t size, const char* lastQuestion) {
-    snprintf(postData, size, "{\n    \"model\": \"phi4:latest\",\n    \"messages\": [\n");
+    snprintf(postData, size, "{\n    \"model\": \"model-identifier\",\n    \"messages\": [\n");
 
     // Tworzymy podsumowanie historii rozmowy
     strncat(postData, "        {\"role\": \"system\", \"content\": \"Answer as short as you can. Context of the conversation:\\n", size - strlen(postData) - 1);
@@ -82,8 +82,8 @@ void SendHttpPostRequest(const char* url, const char* postData) {
 
     // Tworzenie połączenia z serwerem
     // Rozbijamy URL, aby uzyskać hosta i port
-    const char* host = "127.0.0.1";
-    const int port = 11434;
+    const char* host = "localhost";
+    const int port = 1234;
 
     hConnect = InternetConnectA(hInternet, host, port, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (hConnect == NULL) {
@@ -139,7 +139,7 @@ void SendHttpPostRequest(const char* url, const char* postData) {
 }
 
 int main() {
-    const char* url = "http://127.0.0.1:11434";  // Adres lokalnego serwera AI
+    const char* url = "http://localhost:1234/v1/chat/completions";  // Adres lokalnego serwera AI
     char userQuestion[MAX_MSG_LEN];
 
     printf("Zadaj pytanie (wpisz 'exit' aby zakonczyc):\n");
